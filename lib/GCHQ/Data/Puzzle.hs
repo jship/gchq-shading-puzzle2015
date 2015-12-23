@@ -10,8 +10,9 @@ module GCHQ.Data.Puzzle
 import Control.Arrow ( (&&&), (***), (>>>), first, second )
 import Control.Monad ( replicateM )
 import Data.Aeson ( FromJSON, ToJSON, decode', encode )
+import Data.Bits ( (.|.), shiftL )
 import qualified Data.ByteString.Lazy as LBS ( ByteString )
-import Data.List ( nub, sort )
+import Data.List ( groupBy, nub, sort )
 import GHC.Generics ( Generic )
 
 data Puzzle = Puzzle
@@ -62,3 +63,12 @@ solvePuzzle inPuzzle = outPuzzle where
   inRowShadingSequences = rowShadingSequences inPuzzle
   inColShadingSequences = colShadingSequences inPuzzle
   rowColCount = length inRowShadingSequences
+
+  -- [(0, 5), (1, 4)]
+  rowToInitIntPairs = map (foldr1 $ curry $ fst &&& snd *** snd >>> fst *** uncurry (.|.)) rowToSetBitPairs
+
+  -- [[(0, 1), (0, 4)], [(1, 2)], ...]
+  rowToSetBitPairs = map (map $ second (shiftL (1 :: Int))) shadedSquaresGroupedByRow
+
+  -- [[(0, 0), (0, 2)], [(1, 1)], ...]
+  shadedSquaresGroupedByRow = groupBy (curry $ fst *** fst >>> uncurry (==)) inShadedSquares
