@@ -1,18 +1,20 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 module GCHQ.Data.Puzzle
-  ( Puzzle
+  ( Puzzle(..)
   , readPuzzleJSON
   , writePuzzleJSON
   , solvePuzzle
   ) where
 
+import qualified BitArray as BA ( BitArray(..), toBoolList )
 import Control.Arrow ( (&&&), (***), (>>>), first, second )
-import Control.Monad ( replicateM )
 import Data.Aeson ( FromJSON, ToJSON, decode', encode )
 import Data.Bits ( (.|.), shiftL )
-import qualified Data.ByteString.Lazy as LBS ( ByteString )
-import Data.List ( groupBy, nub, sort )
+import qualified Data.ByteString.Lazy.Char8 as LBS ( ByteString )
+import Data.Foldable ( foldl' )
+import Data.List ( group, groupBy, nub, sort )
+import Data.Tuple ( swap )
 import GHC.Generics ( Generic )
 
 data Puzzle = Puzzle
@@ -59,16 +61,25 @@ writePuzzleJSON = encode
 solvePuzzle :: Puzzle -> Puzzle
 solvePuzzle inPuzzle = outPuzzle where
   outPuzzle = inPuzzle
-  inShadedSquares = shadedSquares inPuzzle
+
+  allValidRowInts = map (map snd) $ flip map allRowInts $ filter $
+    second (BA.BitArray >>> BA.toBoolList >>> group >>> filter (all (== True)) >>> map length) >>> uncurry (==)
+  allRowInts = map (first repeat >>> second (flip enumFromTo (2 ^ rowColCount - 1)) >>> uncurry zip)
+             . zip inRowShadingSequences
+             $ initRowInts
+
+  initRowInts = reverse . (lastZeroes ++) . foldl' (\acc (pos, val) ->
+    val : (replicate (pos - length acc) 0) ++ acc) [] $ rowToInitIntPairs
+
+  lastZeroes = flip replicate 0 $ rowColCount - (fst $ last rowToInitIntPairs) - 1
+
+  rowToInitIntPairs = map (foldr1 $ curry $ fst &&& snd *** snd >>> fst *** uncurry (.|.)) rowToSetBitPairs
+  rowToSetBitPairs = map (map $ second (shiftL (1 :: Int))) shadedSquaresGroupedByRow
+  shadedSquaresGroupedByRow = groupBy (curry $ fst *** fst >>> uncurry (==)) inShadedSquares
+
+  inShadedSquares       = shadedSquares inPuzzle
   inRowShadingSequences = rowShadingSequences inPuzzle
   inColShadingSequences = colShadingSequences inPuzzle
-  rowColCount = length inRowShadingSequences
+  rowColCount           = length inRowShadingSequences
 
-  -- [(0, 5), (1, 4)]
-  rowToInitIntPairs = map (foldr1 $ curry $ fst &&& snd *** snd >>> fst *** uncurry (.|.)) rowToSetBitPairs
-
-  -- [[(0, 1), (0, 4)], [(1, 2)], ...]
-  rowToSetBitPairs = map (map $ second (shiftL (1 :: Int))) shadedSquaresGroupedByRow
-
-  -- [[(0, 0), (0, 2)], [(1, 1)], ...]
-  shadedSquaresGroupedByRow = groupBy (curry $ fst *** fst >>> uncurry (==)) inShadedSquares
+  assocPairLeft  (a, (b, c)) = ((a, b), c)
