@@ -15,6 +15,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      lib
   exposed-modules:     GCHQ.Data.Puzzle
+  ghc-options:         -O2 -Wall
   build-depends:       aeson
                      , base >= 4.7 && < 5
                      , bit-array
