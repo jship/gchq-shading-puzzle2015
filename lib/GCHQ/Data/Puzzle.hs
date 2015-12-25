@@ -59,13 +59,14 @@ writePuzzleJSON :: Puzzle -> LBS.ByteString
 writePuzzleJSON = encode
 
 solvePuzzle :: Puzzle -> Puzzle
-solvePuzzle inPuzzle = outPuzzle where
-  outPuzzle = inPuzzle
+solvePuzzle inPuzzle@(Puzzle inSs inRss inCss) = outPuzzle where
+  outPuzzle = inPuzzle { shadedSquares = newShadedSquares }
+  newShadedSquares = [(0, 0)]
 
   allValidRowInts = map (map snd) $ flip map allRowInts $ filter $
     second (BA.BitArray >>> BA.toBoolList >>> group >>> filter (all (== True)) >>> map length) >>> uncurry (==)
   allRowInts = map (first repeat >>> second (flip enumFromTo (2 ^ rowColCount - 1)) >>> uncurry zip)
-             . zip inRowShadingSequences
+             . zip inRss
              $ initRowInts
 
   initRowInts = reverse . (lastZeroes ++) . foldl' (\acc (pos, val) ->
@@ -75,11 +76,8 @@ solvePuzzle inPuzzle = outPuzzle where
 
   rowToInitIntPairs = map (foldr1 $ curry $ fst &&& snd *** snd >>> fst *** uncurry (.|.)) rowToSetBitPairs
   rowToSetBitPairs = map (map $ second (shiftL (1 :: Int))) shadedSquaresGroupedByRow
-  shadedSquaresGroupedByRow = groupBy (curry $ fst *** fst >>> uncurry (==)) inShadedSquares
+  shadedSquaresGroupedByRow = groupBy (curry $ fst *** fst >>> uncurry (==)) inSs
 
-  inShadedSquares       = shadedSquares inPuzzle
-  inRowShadingSequences = rowShadingSequences inPuzzle
-  inColShadingSequences = colShadingSequences inPuzzle
-  rowColCount           = length inRowShadingSequences
+  rowColCount = length inRss
 
   assocPairLeft  (a, (b, c)) = ((a, b), c)
