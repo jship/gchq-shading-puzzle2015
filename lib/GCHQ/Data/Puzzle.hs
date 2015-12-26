@@ -13,7 +13,7 @@ import Data.Aeson ( FromJSON, ToJSON, decode', encode )
 import Data.Bits ( (.|.), shiftL )
 import qualified Data.ByteString.Lazy.Char8 as LBS ( ByteString )
 import Data.Foldable ( foldl' )
-import Data.List ( genericLength, group, groupBy, nub, sort )
+import Data.List ( genericLength, find, group, groupBy, nub, sort, transpose )
 import Data.Word ( Word32 )
 import GHC.Generics ( Generic )
 
@@ -58,16 +58,23 @@ readPuzzleJSON bs = decode' bs >>= check >>= prepare where
 writePuzzleJSON :: Puzzle -> LBS.ByteString
 writePuzzleJSON = encode
 
-solvePuzzle :: Puzzle -> Puzzle
-solvePuzzle inPuzzle@(Puzzle inSs inRss inCss) = outPuzzle where
-  outPuzzle = inPuzzle { shadedSquares = newShadedSquares }
-  newShadedSquares = [(0, 0)]
+solvePuzzle :: Puzzle -> Maybe Puzzle
+solvePuzzle (Puzzle inSs inRss inCss) = outPuzzle where
+  outPuzzle = Puzzle <$> maybeNewShadedSquares <*> Just inRss <*> Just inCss
 
-  allValidRowInts = map (map snd) $ flip map allRowInts $ filter $
-    second (BA.BitArray >>> BA.toBoolList >>> group >>> filter (all (== True)) >>> map genericLength) >>> uncurry (==)
+  maybeNewShadedSquares = map (id &&& (map toBools >>> transpose >>> map toSequenceLengths >>> zipWith (==) inCss >>> and))
+                      >>> find snd >>> fmap (fst >>> zip natWords >>> map (second (toBools >>> zip natWords
+                      >>> filter snd >>> map fst)) >>> map (repeat *** id >>> uncurry zip) >>> concat)
+                        $ allValidRowPossibilities
+  allValidRowPossibilities = sequenceA allValidRowInts
+
+  allValidRowInts = map (map snd) $ flip map allRowInts $ filter $ second (toBools >>> toSequenceLengths) >>> uncurry (==)
   allRowInts = map (first repeat >>> second (flip enumFromTo (2 ^ rowColCount - 1)) >>> uncurry zip)
              . zip inRss
              $ initRowInts
+
+  toBools = BA.BitArray >>> BA.toBoolList
+  toSequenceLengths = group >>> filter and >>> map genericLength
 
   initRowInts = reverse . (lastZeroes ++) . foldl' (\acc (pos, val) ->
     val : (replicate (fromIntegral (pos - genericLength acc)) 0) ++ acc) [] $ rowToInitIntPairs
@@ -79,6 +86,5 @@ solvePuzzle inPuzzle@(Puzzle inSs inRss inCss) = outPuzzle where
   rowToSetBitPairs = map (map $ second (fromIntegral >>> shiftL (1 :: Word32))) shadedSquaresGroupedByRow
   shadedSquaresGroupedByRow = groupBy (curry $ fst *** fst >>> uncurry (==)) inSs
 
-  rowColCount :: Word32; rowColCount = genericLength inRss
-
-  assocPairLeft  (a, (b, c)) = ((a, b), c)
+  rowColCount = (genericLength inRss) :: Word32
+  natWords = [(0 :: Word32)..]

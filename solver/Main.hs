@@ -1,13 +1,21 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
-import qualified Data.ByteString.Lazy as LBS ( readFile )
+import qualified Data.ByteString.Lazy as LBS ( readFile, writeFile )
 import Data.Maybe ( listToMaybe )
-import GCHQ.Data.Puzzle ( readPuzzleJSON, solvePuzzle )
+import GCHQ.Data.Puzzle ( readPuzzleJSON, solvePuzzle, writePuzzleJSON )
 import System.Environment ( getArgs )
 
 main :: IO ()
 main = listToMaybe <$> getArgs >>= run where
-  run Nothing = putStrLn "Invalid input file."
+  run Nothing = putStrLn "ERROR: Must specify input file"
   run (Just filePath) = do
-    fileContents <- LBS.readFile filePath
-    print (solvePuzzle <$> readPuzzleJSON fileContents)
+    inputPuzzleJSON  <- LBS.readFile filePath
+    case readPuzzleJSON inputPuzzleJSON of
+      Nothing -> putStrLn $ "ERROR: Failed to parse JSON: " ++ filePath
+      Just inputPuzzle -> case solvePuzzle inputPuzzle of
+        Nothing -> putStrLn $ "ERROR: Failed to solve puzzle: " ++ filePath
+        Just solvedPuzzle -> LBS.writeFile ("solution.json")
+                           . writePuzzleJSON
+                           $ solvedPuzzle
