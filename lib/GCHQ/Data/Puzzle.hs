@@ -9,13 +9,13 @@ module GCHQ.Data.Puzzle
 
 import qualified BitArray as BA
 import Conduit
-import Control.Applicative
 import Control.Arrow ( (&&&), (***), (>>>), first, second )
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Aeson ( FromJSON, ToJSON, decode', encode )
 import Data.Array
 import qualified Data.ByteString.Lazy.Char8 as LBS ( ByteString )
+import qualified Data.IntMap.Strict as IntMap
 import Data.List ( genericLength, group, nub, sort )
 import Data.Word ( Word8, Word32 )
 import qualified Ersatz as E
@@ -92,15 +92,18 @@ solvePuzzle (Puzzle hintIndices inRss inCss) = run where
     forM_ hintIndices $ \idx ->
       E.assert $ (bitArray ! idx) E.=== E.encode 1
 
-    flip runReaderT bitArray $ runConduit $ allPossibleInts
+    rowConstraints <- flip runReaderT bitArray $ runConduit $ allPossibleInts
       =$= allValidInts (zip rowColIndices inRss)
       =$= allValidBits colIndicesForRow
-      =$= sinkList
+      =$= allOr'edValidBits
 
-    flip runReaderT bitArray $ runConduit $ allPossibleInts
+    colConstraints <- flip runReaderT bitArray $ runConduit $ allPossibleInts
       =$= allValidInts (zip rowColIndices inCss)
       =$= allValidBits rowIndicesForCol
-      =$= sinkList
+      =$= allOr'edValidBits
+
+    E.assert $ E.and rowConstraints
+    E.assert $ E.and colConstraints
 
     return bitArray
 
@@ -126,6 +129,11 @@ solvePuzzle (Puzzle hintIndices inRss inCss) = run where
         bits = flip map (zip (mkIndices rowCol) encodedWords) $ \(idx, word) ->
           (bitArray ! idx) E.=== word
     yield (rowCol, E.and bits)
+
+  allOr'edValidBits :: (Monad m, MonadState s m, E.HasSAT s)
+                    => Consumer (RowCol, E.Bit) (ReaderT BitGrid m) (IntMap.IntMap E.Bit)
+  allOr'edValidBits = foldlC inserter IntMap.empty where
+    inserter intMap (rowCol, bit) = IntMap.insertWith (E.||) (fromIntegral rowCol) bit intMap
 
   toBools :: Word32 -> [Bool]
   toBools = BA.BitArray >>> BA.toBoolList
