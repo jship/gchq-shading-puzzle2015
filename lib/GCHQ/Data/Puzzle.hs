@@ -67,19 +67,17 @@ type Index = (RowCol, RowCol)
 type WordGrid = Array Index Word8
 type BitGrid = Array Index E.Bit1
 
-solvePuzzle :: Puzzle -> IO ()
-solvePuzzle (Puzzle hintIndices inRss inCss) = run where
-  run :: IO ()
+solvePuzzle :: Puzzle -> IO (Either String Puzzle)
+solvePuzzle inPuzzle@(Puzzle hintIndices inRss inCss) = run where
+  run :: IO (Either String Puzzle)
   run = do
-    putStrLn "Problem:"
-    putStr . render $ initialWordGrid
-
-    putStrLn "Solution:"
-    (res, msol) <- E.solveWith E.minisat problem
-    when (res /= E.Satisfied) $ fail (show res)
-    case msol of
-      Just sol -> putStr (render sol)
-      _ -> fail ("sol was " ++ show msol)
+    (result, msolution) <- E.solveWith E.minisat problem
+    if (result /= E.Satisfied)
+       then return . Left . show $ result
+       else case msolution of
+         Nothing -> return . Left $ "No returned solution"
+         Just solution -> return . Right $
+           inPuzzle { shadedSquares = hintsFromWordGrid solution }
 
   problem :: (Applicative m, MonadState s m, E.HasSAT s) => m BitGrid
   problem = do
@@ -141,9 +139,13 @@ solvePuzzle (Puzzle hintIndices inRss inCss) = run where
   toSequenceLengths :: [Bool] -> [Word8]
   toSequenceLengths = group >>> filter and >>> map genericLength
 
-  initialWordGrid :: WordGrid
-  initialWordGrid = (array gridRange . zip gridIndices . repeat $ 0)
-                 // (zip hintIndices . repeat $ 1)
+  initialWordGrid :: [(Word8, Word8)] -> WordGrid
+  initialWordGrid hints = (array gridRange . zip gridIndices . repeat $ 0)
+                       // (zip hints . repeat $ 1)
+
+  hintsFromWordGrid :: WordGrid -> [(Word8, Word8)]
+  hintsFromWordGrid wordGrid = hints where
+    hints = map fst . filter (second (/= 0) >>> snd) . assocs $ wordGrid
 
   gridRange :: (Index, Index)
   gridRange = ((0, 0), (lastRowColIndex, lastRowColIndex))
