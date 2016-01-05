@@ -20,6 +20,7 @@ module GCHQ.Data.Puzzle.Internal
   , checkShadingSeqsNotNull
   , checkShadingSeqsVsBounds
   , colIndicesForRow
+  , fastLength
   , gridRange
   , hintsFromWordGrid
   , ite
@@ -54,7 +55,7 @@ import Data.Function ( (.), ($), flip )
 import Data.Functor ( fmap )
 import Data.IntMap.Strict ( IntMap, empty, insertWith )
 import Data.Ix ( rangeSize )
-import Data.List ( filter, genericLength, group, length, nub, null, sort, zip )
+import Data.List ( filter, group, length, nub, null, sort, zip )
 import Data.Maybe ( Maybe(..) )
 import Data.Ord ( (<), (<=), (>), (>=) )
 import Data.String ( String )
@@ -65,7 +66,7 @@ import qualified Ersatz as E
   , encode, exists, minisat, solveWith
   )
 import GHC.Generics ( Generic )
-import Prelude ( (+), (-), (^), IO, fromIntegral, pred )
+import Prelude ( (+), (-), (^), IO, Num, fromIntegral, pred )
 import Text.Show ( Show, show )
 
 type RowCol = Word8
@@ -149,7 +150,7 @@ checkSeqItemsArePositive = and . fmap (all (> 0))
 checkShadedSquares :: [[Word8]] -> [(Word8, Word8)] -> Bool
 checkShadedSquares shadingSeqs = fmap (checkIdx *** checkIdx >>> uncurry (&&))
                              >>> and where
-  checkIdx = (>= 0) &&& (< genericLength shadingSeqs) >>> uncurry (&&)
+  checkIdx = (>= 0) &&& (< fastLength shadingSeqs) >>> uncurry (&&)
 
 checkShadedSquaresNotNull :: [a] -> Bool
 checkShadedSquaresNotNull = null >>> not
@@ -158,13 +159,16 @@ checkShadingSeqsNotNull :: [[a]] -> Bool
 checkShadingSeqsNotNull = and . fmap (null >>> not)
 
 checkShadingSeqsVsBounds :: [[Word8]] -> Bool
-checkShadingSeqsVsBounds ss = ( fmap ( sum &&& genericLength
+checkShadingSeqsVsBounds ss = ( fmap ( sum &&& fastLength
                                    >>> uncurry (+) >>> pred >>> (<= boundLen))
                             >>> and ) ss where
-  boundLen = genericLength ss
+  boundLen = fastLength ss
 
 colIndicesForRow :: Puzzle -> RowCol -> [Index]
 colIndicesForRow p row = [(row, col) | col <- rowColIndices p]
+
+fastLength :: (Num i) => [a] -> i
+fastLength = length >>> fromIntegral
 
 gridRange :: Puzzle -> (Index, Index)
 gridRange p = ((0, 0), (lastRowColIndex p, lastRowColIndex p))
@@ -211,7 +215,7 @@ problemAsSAT puzzle@(Puzzle hintIndices inRss inCss) = do
   return bitGridVars
 
 rowColCount :: Puzzle -> Word8
-rowColCount = rowShadingSequences >>> genericLength
+rowColCount = rowShadingSequences >>> fastLength
 
 rowColIndices :: Puzzle -> [Word8]
 rowColIndices p = [0..(lastRowColIndex p)]
@@ -232,4 +236,4 @@ toBools :: Word32 -> [Bool]
 toBools = BitArray >>> toBoolList
 
 toSequenceLengths :: [Bool] -> [Word8]
-toSequenceLengths = group >>> filter and >>> fmap genericLength
+toSequenceLengths = group >>> filter and >>> fmap fastLength
